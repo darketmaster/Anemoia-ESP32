@@ -52,7 +52,7 @@ static uint8_t NESControllerRead()
     return state;
 }
 
-static uint8_t SNESControllerRead()
+static uint8_t SNESControllerRead_old()
 {
     // SNES bits
     // 0 - B
@@ -95,6 +95,107 @@ static uint8_t SNESControllerRead()
 
     return state;
 }
+
+static uint8_t SNESControllerRead()
+{
+    // --- 1. Tabla de mapeo de bits SNES a posiciones en 'snes_state' ---
+    // Cada entrada indica a qué bit de snes_state debe ir el bit i del SNES.
+    // Bits de salida (0-7): orden NES (A, B, Select, Start, Up, Down, Left, Right)
+    // Bits 8-11: almacenan los botones que activan turbo (X, R, Y, L)
+    static constexpr uint8_t map[12] = {
+        1,   // SNES bit0 (B)     -> snes_state bit1 (emulador B)
+        10,  // SNES bit1 (Y)     -> snes_state bit10 (turbo B, guardado)
+        2,   // SNES bit2 (Select)-> snes_state bit2 (Select)
+        3,   // SNES bit3 (Start) -> snes_state bit3 (Start)
+        4,   // SNES bit4 (Up)    -> snes_state bit4 (Up)
+        5,   // SNES bit5 (Down)  -> snes_state bit5 (Down)
+        6,   // SNES bit6 (Left)  -> snes_state bit6 (Left)
+        7,   // SNES bit7 (Right) -> snes_state bit7 (Right)
+        0,   // SNES bit8 (A)     -> snes_state bit0 (emulador A)
+        8,   // SNES bit9 (X)     -> snes_state bit8 (turbo A)
+        11,  // SNES bit10 (L)    -> snes_state bit11 (turbo B)
+        9    // SNES bit11 (R)    -> snes_state bit9 (turbo A)
+    };
+
+    // --- 2. Lectura y mapeo directo ---
+    uint16_t snes_state = 0;
+    digitalWrite(CONTROLLER_SNES_LATCH, HIGH);
+    delayMicroseconds(12);
+    digitalWrite(CONTROLLER_SNES_LATCH, LOW);
+    delayMicroseconds(6);
+
+    for (int i = 0; i < 12; i++)
+    {
+        if (digitalRead(CONTROLLER_SNES_DATA) == LOW)
+            snes_state |= (1 << map[i]);   // Coloca el bit en la posición mapeada
+        digitalWrite(CONTROLLER_SNES_CLK, LOW);
+        delayMicroseconds(6);
+        digitalWrite(CONTROLLER_SNES_CLK, HIGH);
+        delayMicroseconds(6);
+    }
+
+    // --- 3. Estado base (bits 0-7 ya están en orden NES) ---
+    uint8_t state = snes_state & 0xFF;
+
+    // --- 4. Lógica de turbo (solo para los bits 0 y 1) ---
+    // Botones que activan turbo A: bits 8 o 9 de snes_state (X o R)
+    bool turboA = (snes_state & (1 << 8)) || (snes_state & (1 << 9));
+    // Botones que activan turbo B: bits 10 o 11 (Y o L)
+    bool turboB = (snes_state & (1 << 10)) || (snes_state & (1 << 11));
+
+    // Variables estáticas para contadores (persisten entre llamadas)
+    static uint8_t cntA = 0;
+    static bool  turboA_state = false;
+    static uint8_t cntB = 0;
+    static bool  turboB_state = false;
+
+    const uint8_t TURBO_FRAMES = 3;  // Ajusta la frecuencia (3 frames = ~20 Hz)
+
+    // Turbo A
+    if (turboA)
+    {
+        if (++cntA >= TURBO_FRAMES)
+        {
+            cntA = 0;
+            turboA_state = !turboA_state;
+        }
+    }
+    else
+    {
+        cntA = 0;
+        turboA_state = false;
+    }
+
+    // Turbo B
+    if (turboB)
+    {
+        if (++cntB >= TURBO_FRAMES)
+        {
+            cntB = 0;
+            turboB_state = !turboB_state;
+        }
+    }
+    else
+    {
+        cntB = 0;
+        turboB_state = false;
+    }
+
+    // Aplicar turbo: el botón turbo tiene prioridad sobre el botón físico
+    // Si el turbo está activo, forzamos el bit correspondiente (A = bit0, B = bit1)
+    if (turboA_state)
+        state |= (1 << 0);      // Activa A
+    else if (turboA)
+        state &= ~(1 << 0);     // Si hay turbo pero no está en el pulso, desactiva A
+
+    if (turboB_state)
+        state |= (1 << 1);      // Activa B
+    else if (turboB)
+        state &= ~(1 << 1);     // Desactiva B si turbo está activo pero en ciclo bajo
+
+    return state;
+}
+
 
 static uint8_t PSXTransferByte(uint8_t byte)
 {

@@ -3,7 +3,7 @@
 
 #include "src/ControllerTypes.h"
 // Controller Configuration
-#define CONTROLLER_TYPE CT_GPIO
+#define CONTROLLER_TYPE CT_SNES  //CT_GPIO
 
 // Screen Configuration
 #define TFT_BACKLIGHT_ENABLE
@@ -11,22 +11,23 @@
 #define SCREEN_ROTATION   3 // Screen orientation: 1 or 3 (1 = landscape, 3 = landscape flipped)
 #define SCREEN_SWAP_BYTES
 
+#define SD_USE_SPI 
 // MicroSD card module Pins
 // SD card SPI frequency (try lower if you have issues with SD card initialization, e.g. 4000000)
-#define SD_FREQ                  80000000
+#define SD_FREQ                  4000000 //80000000
 #define SD_MOSI_PIN              13
 #define SD_MISO_PIN              12
 #define SD_SCLK_PIN              14
-#define SD_CS_PIN                -1
+#define SD_CS_PIN                33 //5
 #define SD_SPI_PORT              HSPI
 
 // Button pins
 #define A_BUTTON                 2
 #define B_BUTTON                 15
-#define LEFT_BUTTON              27
-#define RIGHT_BUTTON             33
-#define UP_BUTTON                26
-#define DOWN_BUTTON              32
+#define LEFT_BUTTON              25 //27
+#define RIGHT_BUTTON             32 //33
+#define UP_BUTTON                26 
+#define DOWN_BUTTON              27 //32
 #define START_BUTTON             16
 #define SELECT_BUTTON            21
 
@@ -35,10 +36,13 @@
 #define CONTROLLER_NES_LATCH     -1
 #define CONTROLLER_NES_DATA      -1
 
-// Unused SNES controller pins
-#define CONTROLLER_SNES_CLK      -1
-#define CONTROLLER_SNES_LATCH    -1
-#define CONTROLLER_SNES_DATA     -1
+// SNES controller pins
+//#define CONTROLLER_SNES_CLK      -1
+//#define CONTROLLER_SNES_LATCH    -1
+//#define CONTROLLER_SNES_DATA     -1
+#define CONTROLLER_SNES_CLK   26
+#define CONTROLLER_SNES_LATCH 25
+#define CONTROLLER_SNES_DATA  27
 
 // Unused PS1/PS2 controller pins
 #define CONTROLLER_PSX_DATA      -1
@@ -57,6 +61,6 @@
 #define DAC_PIN                  0
 
 #define FRAMESKIP
-// #define DEBUG // Uncomment this line if you want debug prints from serial
+#define DEBUG // Uncomment this line if you want debug prints from serial
 
 #endif
