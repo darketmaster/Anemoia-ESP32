@@ -12,6 +12,7 @@
 #include "mappers/mapper002.h"
 #include "mappers/mapper003.h"
 #include "mappers/mapper004.h"
+#include "mappers/mapper009.h"
 #include "mappers/mapper069.h"
 #include "rom_backends.h"
 

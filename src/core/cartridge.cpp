@@ -79,6 +79,7 @@ bool Cartridge::cpuRead(uint16_t addr, uint8_t& data)
     case 2: return mapper002_cpuRead(&mapper, addr, data);
     case 3: return mapper003_cpuRead(&mapper, addr, data);
     case 4: return mapper004_cpuRead(&mapper, addr, data);
+    case 9: return mapper009_cpuRead(&mapper, addr, data); //new add darketmaster
     case 69: return mapper069_cpuRead(&mapper, addr, data);
     default: return false;
     }
@@ -93,6 +94,7 @@ bool Cartridge::cpuWrite(uint16_t addr, uint8_t data)
     case 2: return mapper002_cpuWrite(&mapper, addr, data);
     case 3: return mapper003_cpuWrite(&mapper, addr, data);
     case 4: return mapper004_cpuWrite(&mapper, addr, data);
+    case 9: return mapper009_cpuWrite(&mapper, addr, data); //new add darketmaster
     case 69: return mapper069_cpuWrite(&mapper, addr, data);
     default: return false;
     }
@@ -107,6 +109,7 @@ bool Cartridge::ppuRead(uint16_t addr, uint8_t& data)
     case 2: return mapper002_ppuRead(&mapper, addr, data);
     case 3: return mapper003_ppuRead(&mapper, addr, data);
     case 4: return mapper004_ppuRead(&mapper, addr, data);
+    case 9: return mapper009_ppuRead(&mapper, addr, data); //new add darketmaster
     case 69: return mapper069_ppuRead(&mapper, addr, data);
     default: return false;
     }
@@ -121,6 +124,7 @@ bool Cartridge::ppuWrite(uint16_t addr, uint8_t data)
     case 2: return mapper002_ppuWrite(&mapper, addr, data);
     case 3: return mapper003_ppuWrite(&mapper, addr, data);
     case 4: return mapper004_ppuWrite(&mapper, addr, data);
+    case 9: return mapper009_ppuWrite(&mapper, addr, data);//new add darketmaster
     case 69: return mapper069_ppuWrite(&mapper, addr, data);
     default: return false;
     }
@@ -135,6 +139,7 @@ uint8_t* Cartridge::ppuReadPtr(uint16_t addr)
     case 2: return mapper002_ppuReadPtr(&mapper, addr);
     case 3: return mapper003_ppuReadPtr(&mapper, addr);
     case 4: return mapper004_ppuReadPtr(&mapper, addr);
+    case 9: return mapper009_ppuReadPtr(&mapper, addr);//new add darketmaster
     case 69: return mapper069_ppuReadPtr(&mapper, addr);
     default: return nullptr;
     }
@@ -167,6 +172,7 @@ void Cartridge::reset()
     case 2: return mapper002_reset(&mapper);
     case 3: return mapper003_reset(&mapper);
     case 4: return mapper004_reset(&mapper);
+    case 9: return mapper009_reset(&mapper);//new add darketmaster
     case 69: return mapper069_reset(&mapper);
     default: return;
     }
@@ -209,6 +215,7 @@ void Cartridge::dumpState(File& state)
     case 2: return mapper002_dumpState(&mapper, state);
     case 3: return mapper003_dumpState(&mapper, state);
     case 4: return mapper004_dumpState(&mapper, state);
+    case 9: return mapper009_dumpState(&mapper, state);//new add darketmaster
     case 69: return mapper069_dumpState(&mapper, state);
     default: return;
     }
@@ -224,6 +231,7 @@ void Cartridge::loadState(File& state)
     case 2: return mapper002_loadState(&mapper, state);
     case 3: return mapper003_loadState(&mapper, state);
     case 4: return mapper004_loadState(&mapper, state);
+    case 9: return mapper009_loadState(&mapper, state);//new add darketmaster
     case 69: return mapper069_loadState(&mapper, state);
     default: return;
     }
@@ -253,6 +261,7 @@ void Cartridge::createMapper(uint8_t number_PRG_banks, uint8_t number_CHR_banks,
     case 2: mapper = createMapper002(number_PRG_banks, number_CHR_banks, backend, this); break;
     case 3: mapper = createMapper003(number_PRG_banks, number_CHR_banks, backend, this); break;
     case 4: mapper = createMapper004(number_PRG_banks, number_CHR_banks, backend, this); break;
+    case 9: mapper = createMapper009(number_PRG_banks, number_CHR_banks, backend, this); break;//new add darketmaster
     case 69: mapper = createMapper069(number_PRG_banks, number_CHR_banks, backend, this); break;
     default: is_valid = false; break;
     }
