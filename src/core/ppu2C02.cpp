@@ -9,6 +9,9 @@ uint16_t* Ppu2C02::ptr_display = Ppu2C02::display_buffer_front;
 uint16_t* Ppu2C02::ptr_back_buffer = Ppu2C02::display_buffer_back;
 #else
 DMA_ATTR uint16_t Ppu2C02::display_buffer[SCANLINE_SIZE * SCANLINES_PER_BUFFER];
+    #ifdef CROP_SIZE
+      DMA_ATTR uint16_t Ppu2C02::crop_buffer[CROP_SIZE * SCANLINES_PER_BUFFER];
+    #endif    
 #endif
 constexpr uint8_t Ppu2C02::palette_mirror[32];
 

@@ -95,8 +95,11 @@ IRAM_ATTR void emulate()
     TaskHandle_t polling_task_handle;
     xTaskCreatePinnedToCore(pollingTask, "Polling Task", 1024, &nes, 1, &polling_task_handle, 0);
 
-    screen.setAddrWindow(32, 0, 256, 240);
-
+    #ifdef CROP_SIZE
+      screen.setAddrWindow(0, 0, CROP_SIZE, 240);    
+    #else 
+      screen.setAddrWindow(32, 0, 256, 240);
+    #endif 
     LOGF("Free heap: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
     LOGF("Free DMA heap: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_DMA));
     multi_heap_info_t info;
@@ -125,7 +128,11 @@ IRAM_ATTR void emulate()
                 vTaskResume(apu_task_handle);
                 next_frame = esp_timer_get_time() + FRAME_TIME;
                 nes.controller = 0;
-                screen.setAddrWindow(32, 0, 256, 240);
+                #ifdef CROP_SIZE
+                  screen.setAddrWindow(0, 0, CROP_SIZE, 240);    
+                #else 
+                  screen.setAddrWindow(32, 0, 256, 240);
+                #endif 
             }
         }
 

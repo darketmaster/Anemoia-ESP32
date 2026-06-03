@@ -79,6 +79,9 @@ private:
     static uint16_t display_buffer_back[SCANLINE_SIZE * SCANLINES_PER_BUFFER];
 #else
     static uint16_t display_buffer[SCANLINE_SIZE * SCANLINES_PER_BUFFER];
+    #ifdef CROP_SIZE
+      static uint16_t crop_buffer[CROP_SIZE * SCANLINES_PER_BUFFER];
+    #endif    
 #endif
 
     // clang-format off
@@ -860,6 +863,9 @@ public:
     static uint16_t* ptr_back_buffer;
 #else
     static constexpr uint16_t* ptr_display = display_buffer;
+    #ifdef CROP_SIZE
+      static constexpr uint16_t* ptr_crop_buffer = crop_buffer;
+    #endif
 #endif
 };
 

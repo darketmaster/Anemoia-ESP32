@@ -10,6 +10,9 @@
 #define TFT_BACKLIGHT_PIN 22
 #define SCREEN_ROTATION   3 // Screen orientation: 1 or 3 (1 = landscape, 3 = landscape flipped)
 #define SCREEN_SWAP_BYTES
+//#define DISABLE_DMA // Uncomment this line if using parallel communication instead of SPI
+#define CROP_SIZE 240
+#define CROP_OFFSET 8
 
 #define SD_USE_SPI 
 // MicroSD card module Pins
@@ -40,9 +43,14 @@
 //#define CONTROLLER_SNES_CLK      -1
 //#define CONTROLLER_SNES_LATCH    -1
 //#define CONTROLLER_SNES_DATA     -1
+//#define CONTROLLER_SNES_CLK   26
+//#define CONTROLLER_SNES_LATCH 25
+//#define CONTROLLER_SNES_DATA  27
+
 #define CONTROLLER_SNES_CLK   26
-#define CONTROLLER_SNES_LATCH 25
-#define CONTROLLER_SNES_DATA  27
+#define CONTROLLER_SNES_LATCH 27
+#define CONTROLLER_SNES_DATA  32
+#define CONTROLLER_SNES_DATA_P2  34
 
 // Unused PS1/PS2 controller pins
 #define CONTROLLER_PSX_DATA      -1

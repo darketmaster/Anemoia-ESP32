@@ -125,13 +125,42 @@ void Bus::connectScreen(TFT_eSPI* screen)
     ptr_screen = screen;
 }
 
-IRAM_ATTR void Bus::renderImage(uint16_t scanline)
+/*
+IRAM_ATTR void Bus::renderImage_old(uint16_t scanline)
 {
 #ifndef DISABLE_DMA
     ptr_screen->pushPixelsDMA(ppu.ptr_display, 256 * SCANLINES_PER_BUFFER);
 #else
     ptr_screen->pushPixels(ppu.ptr_display, 256 * SCANLINES_PER_BUFFER);
 #endif
+}
+*/
+
+IRAM_ATTR void Bus::renderImage(uint16_t scanline)
+{
+  #ifdef CROP_SIZE
+    uint16_t* src = ppu.ptr_display;
+    uint16_t* dst = ppu.ptr_crop_buffer;
+
+    for (uint16_t y = 0; y < SCANLINES_PER_BUFFER; y++)
+    {
+        memcpy(dst,  src + CROP_OFFSET,  CROP_SIZE * sizeof(uint16_t) );
+        src += SCANLINE_SIZE;
+        dst += CROP_SIZE;
+    }
+
+    #ifndef DISABLE_DMA
+        ptr_screen->pushPixelsDMA(ppu.ptr_crop_buffer, CROP_SIZE * SCANLINES_PER_BUFFER);
+    #else
+        ptr_screen->pushPixels(ppu.ptr_crop_buffer,CROP_SIZE * SCANLINES_PER_BUFFER);
+    #endif
+  #else
+    #ifndef DISABLE_DMA
+        ptr_screen->pushPixelsDMA(ppu.ptr_display, SCANLINE_SIZE * SCANLINES_PER_BUFFER);
+    #else
+        ptr_screen->pushPixels(ppu.ptr_display, SCANLINE_SIZE * SCANLINES_PER_BUFFER);
+    #endif
+  #endif
 }
 
 IRAM_ATTR void Bus::IRQ()
