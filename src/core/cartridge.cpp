@@ -17,11 +17,15 @@ Cartridge::Cartridge(const char* filename, ROMBackend backend)
     } header;
 
     // Load Cartridge ROM
+    LOGF("Loading ROM: %s\n", filename);
     rom = SD.open(filename, FILE_READ);
     if (!rom) return;
 
     rom.read((uint8_t*)&header, sizeof(cartridge_header));
     if (header.mapper1 & 0x04) rom.seek(rom.position() + 512);
+
+    Serial.printf("PRG_ROM_chunks: %d, CHR_ROM_chunks: %d, mapper1: 0x%02X, mapper2: 0x%02X\n",
+              header.PRG_ROM_chunks, header.CHR_ROM_chunks, header.mapper1, header.mapper2);
 
     mapper_ID = (header.mapper2 & 0xF0) | header.mapper1 >> 4;
     hardware_mirror = (header.mapper1 & 0x01) ? VERTICAL : HORIZONTAL;
@@ -36,6 +40,11 @@ Cartridge::Cartridge(const char* filename, ROMBackend backend)
     case 1:
         number_PRG_banks = header.PRG_ROM_chunks;
         number_CHR_banks = header.CHR_ROM_chunks;
+        /*Serial.printf("CRC32: %08lX, PRG: %d, CHR: %d\n", (unsigned int)CRC32, number_PRG_banks, number_CHR_banks);
+        if (number_PRG_banks == 8 && number_CHR_banks == 16) {
+            number_PRG_banks = 16;
+            Serial.printf("Forzando PRG banks a 16!\n");
+        }*/
         break;
     case 2:
         number_PRG_banks = ((header.PRG_RAM_size & 0x07) << 8) | header.PRG_ROM_chunks;
