@@ -12,6 +12,7 @@
 #include "mappers/mapper002.h"
 #include "mappers/mapper003.h"
 #include "mappers/mapper004.h"
+#include "mappers/mapper005.h"
 #include "mappers/mapper009.h"
 #include "mappers/mapper069.h"
 #include "rom_backends.h"
@@ -62,6 +63,15 @@ public:
     uint8_t mirror = HORIZONTAL;
     uint32_t CRC32 = ~0U;
     MappedROM mROM;
+
+    //new support for mapper 5 darketmaster
+    ///////////////////////////////////////////////////////
+    uint8_t getMapperID() const { return mapper_ID; }
+    void setSpriteMode(bool is8x16);
+
+    uint32_t getPrgBase() const { return prg_base; }
+    uint32_t getChrBase() const { return chr_base; }
+    ///////////////////////////////////////////////////////
 
 private:
     Bus* bus = nullptr;

@@ -16,7 +16,16 @@ IRAM_ATTR void Bus::cpuWrite(uint16_t addr, uint8_t data)
 {
     if (cart->cpuWrite(addr, data)) {}
     else if ((addr & 0xE000) == 0x0000) { RAM[addr & 0x07FF] = data; }
-    else if ((addr & 0xE000) == 0x2000) { ppu.cpuWrite(addr & 0x0007, data); }
+    else if ((addr & 0xE000) == 0x2000) 
+          { 
+            ppu.cpuWrite(addr & 0x0007, data); 
+            //new support for mapper 5 castlevania 3
+            // If writing to PPU_CTRL ($2000) and mapper 5 active, update sprite mode
+            if ((addr & 0x0007) == 0 && cart->getMapperID() == 5) {
+                cart->setSpriteMode((data & 0x20) != 0);
+            }
+            ////////////// new support
+          }
     else if ((addr & 0xF000) == 0x4000 && (addr <= 0x4013 || addr == 0x4015 || addr == 0x4017))
     {
         cpu.apuWrite(addr, data);
