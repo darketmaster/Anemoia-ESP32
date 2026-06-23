@@ -5,7 +5,7 @@
  * This mapper is used by Mike Tyson's Punch-Out!! and other titles.
  * Features 8KB PRG banking and 4KB CHR banking with latch-based tile switching ($FD/$FE).
  * 
- * Memory optimisation: uses lazy loading and limited LRU cache to stay within ESP32 heap.
+ * Memory optimisation: uses eager loading with LRU cache to stay within ESP32 heap.
  * 
  * @version 2.0
  * @author darketmaster

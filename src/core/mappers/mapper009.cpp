@@ -1,7 +1,7 @@
 /**
  * @file mapper009.cpp
- * @brief MMC2 implementation with lazy loading and increased cache
- * @version 2.1
+ * @brief MMC2 implementation with eager loading for LRU mode
+ * @version 2.2
  */
 
 #include "mapper009.h"
@@ -10,7 +10,7 @@
 #include <cstring>
 
 // Enable verbose logging for debugging
-#define LOG_MAPPER009 1
+#define LOG_MAPPER009 0
 
 #if LOG_MAPPER009
     #define MAPPER_LOG(fmt, ...) Serial.printf(fmt, ##__VA_ARGS__)
@@ -31,7 +31,7 @@ struct Mapper009_state {
     uint8_t* ptr_CHR_bank_4K_low;   // $0000–$0FFF
     uint8_t* ptr_CHR_bank_4K_high;  // $1000–$1FFF
 
-    // LRU cache structures (increased size)
+    // LRU cache structures
     Bank PRG_banks_8K[MAPPER009_MAX_CACHED_PRG_BANKS];
     Bank CHR_banks_4K[MAPPER009_MAX_CACHED_CHR_BANKS];
     BankCache PRG_cache_8K;
@@ -45,9 +45,6 @@ struct Mapper009_state {
     uint8_t chr_bank1_fe;
     uint8_t latch0;
     uint8_t latch1;
-
-    // Safety fallback
-    uint8_t dummy_chr[4096] = {0};
 };
 
 // -----------------------------------------------------------------------------
@@ -91,39 +88,6 @@ static inline uint8_t* getCHRBank(Mapper009_state* state, uint8_t bankIndex) {
 }
 
 // -----------------------------------------------------------------------------
-// Lazy loading helpers
-// -----------------------------------------------------------------------------
-
-static inline void ensurePRGBankLoaded(Mapper009_state* state, int bank_idx, uint16_t addr) {
-    uint8_t*& ptr = state->ptr_PRG_bank_8K[bank_idx];
-    if (ptr != state->dummy_chr && ptr != nullptr) return;
-
-    uint8_t bank_index;
-    switch (bank_idx) {
-        case 0: bank_index = state->prg_bank; break;
-        case 1: bank_index = state->number_PRG_banks - 3; break;
-        case 2: bank_index = state->number_PRG_banks - 2; break;
-        case 3: bank_index = state->number_PRG_banks - 1; break;
-        default: return;
-    }
-    ptr = getPRGBank(state, bank_index);
-    if (!ptr) ptr = state->dummy_chr;
-    MAPPER_LOG("LAZY PRG: loaded bank %d for range 0x%04X, ptr=%p\n", bank_index, addr, ptr);
-}
-
-static inline void ensureCHRBankLoaded(Mapper009_state* state, bool lowBank, uint16_t addr) {
-    uint8_t*& ptr = lowBank ? state->ptr_CHR_bank_4K_low : state->ptr_CHR_bank_4K_high;
-    if (ptr != state->dummy_chr && ptr != nullptr) return;
-
-    uint8_t bank_index = lowBank
-        ? ((state->latch0 == 0xFD) ? state->chr_bank0_fd : state->chr_bank0_fe)
-        : ((state->latch1 == 0xFD) ? state->chr_bank1_fd : state->chr_bank1_fe);
-    ptr = getCHRBank(state, bank_index);
-    if (!ptr) ptr = state->dummy_chr;
-    MAPPER_LOG("LAZY CHR: loaded bank %d for %s (addr 0x%04X), ptr=%p\n", bank_index, lowBank?"low":"high", addr, ptr);
-}
-
-// -----------------------------------------------------------------------------
 // Latch update (MMC2 hardware)
 // -----------------------------------------------------------------------------
 
@@ -133,7 +97,6 @@ static inline void mapper009_updateLatch(Mapper009_state* state, uint16_t addr) 
         if (state->latch0 != 0xFD) {
             state->latch0 = 0xFD;
             state->ptr_CHR_bank_4K_low = getCHRBank(state, state->chr_bank0_fd);
-            if (!state->ptr_CHR_bank_4K_low) state->ptr_CHR_bank_4K_low = state->dummy_chr;
             updated = true;
             MAPPER_LOG("LATCH: low = FD (addr 0x%04X)\n", addr);
         }
@@ -141,7 +104,6 @@ static inline void mapper009_updateLatch(Mapper009_state* state, uint16_t addr) 
         if (state->latch0 != 0xFE) {
             state->latch0 = 0xFE;
             state->ptr_CHR_bank_4K_low = getCHRBank(state, state->chr_bank0_fe);
-            if (!state->ptr_CHR_bank_4K_low) state->ptr_CHR_bank_4K_low = state->dummy_chr;
             updated = true;
             MAPPER_LOG("LATCH: low = FE (addr 0x%04X)\n", addr);
         }
@@ -149,7 +111,6 @@ static inline void mapper009_updateLatch(Mapper009_state* state, uint16_t addr) 
         if (state->latch1 != 0xFD) {
             state->latch1 = 0xFD;
             state->ptr_CHR_bank_4K_high = getCHRBank(state, state->chr_bank1_fd);
-            if (!state->ptr_CHR_bank_4K_high) state->ptr_CHR_bank_4K_high = state->dummy_chr;
             updated = true;
             MAPPER_LOG("LATCH: high = FD (addr 0x%04X)\n", addr);
         }
@@ -157,7 +118,6 @@ static inline void mapper009_updateLatch(Mapper009_state* state, uint16_t addr) 
         if (state->latch1 != 0xFE) {
             state->latch1 = 0xFE;
             state->ptr_CHR_bank_4K_high = getCHRBank(state, state->chr_bank1_fe);
-            if (!state->ptr_CHR_bank_4K_high) state->ptr_CHR_bank_4K_high = state->dummy_chr;
             updated = true;
             MAPPER_LOG("LATCH: high = FE (addr 0x%04X)\n", addr);
         }
@@ -178,7 +138,6 @@ bool mapper009_cpuRead(Mapper* mapper, uint16_t addr, uint8_t& data) {
     if (!state) { data = 0xFF; return true; }
 
     int bank_idx = (addr - 0x8000) >> 13;
-    ensurePRGBankLoaded(state, bank_idx, addr);
     data = state->ptr_PRG_bank_8K[bank_idx][addr & 0x1FFF];
     return true;
 }
@@ -192,14 +151,13 @@ bool mapper009_cpuWrite(Mapper* mapper, uint16_t addr, uint8_t data) {
 
     if (addr >= 0xA000 && addr < 0xB000) {
         state->prg_bank = data & 0x0F;
-        state->ptr_PRG_bank_8K[0] = state->dummy_chr; // invalidate
+        state->ptr_PRG_bank_8K[0] = getPRGBank(state, state->prg_bank);
         MAPPER_LOG("PRG bank set to %d\n", state->prg_bank);
     }
     else if (addr >= 0xB000 && addr < 0xC000) {
         state->chr_bank0_fd = data & 0x1F;
         if (state->latch0 == 0xFD) {
             state->ptr_CHR_bank_4K_low = getCHRBank(state, state->chr_bank0_fd);
-            if (!state->ptr_CHR_bank_4K_low) state->ptr_CHR_bank_4K_low = state->dummy_chr;
         }
         MAPPER_LOG("CHR low FD bank = %d\n", state->chr_bank0_fd);
     }
@@ -207,7 +165,6 @@ bool mapper009_cpuWrite(Mapper* mapper, uint16_t addr, uint8_t data) {
         state->chr_bank0_fe = data & 0x1F;
         if (state->latch0 == 0xFE) {
             state->ptr_CHR_bank_4K_low = getCHRBank(state, state->chr_bank0_fe);
-            if (!state->ptr_CHR_bank_4K_low) state->ptr_CHR_bank_4K_low = state->dummy_chr;
         }
         MAPPER_LOG("CHR low FE bank = %d\n", state->chr_bank0_fe);
     }
@@ -215,7 +172,6 @@ bool mapper009_cpuWrite(Mapper* mapper, uint16_t addr, uint8_t data) {
         state->chr_bank1_fd = data & 0x1F;
         if (state->latch1 == 0xFD) {
             state->ptr_CHR_bank_4K_high = getCHRBank(state, state->chr_bank1_fd);
-            if (!state->ptr_CHR_bank_4K_high) state->ptr_CHR_bank_4K_high = state->dummy_chr;
         }
         MAPPER_LOG("CHR high FD bank = %d\n", state->chr_bank1_fd);
     }
@@ -223,7 +179,6 @@ bool mapper009_cpuWrite(Mapper* mapper, uint16_t addr, uint8_t data) {
         state->chr_bank1_fe = data & 0x1F;
         if (state->latch1 == 0xFE) {
             state->ptr_CHR_bank_4K_high = getCHRBank(state, state->chr_bank1_fe);
-            if (!state->ptr_CHR_bank_4K_high) state->ptr_CHR_bank_4K_high = state->dummy_chr;
         }
         MAPPER_LOG("CHR high FE bank = %d\n", state->chr_bank1_fe);
     }
@@ -239,25 +194,7 @@ bool mapper009_cpuWrite(Mapper* mapper, uint16_t addr, uint8_t data) {
 // PPU Read (with auto-banking)
 // -----------------------------------------------------------------------------
 
-bool mapper009_ppuRead(Mapper* mapper, uint16_t addr, uint8_t& data) {
-    if (addr > 0x1FFF) return false;
-
-    Mapper009_state* state = (Mapper009_state*)mapper->state;
-    if (!state) { data = 0; return true; }
-
-    // Update latches based on PPU address
-    mapper009_updateLatch(state, addr);
-
-    bool lowBank = (addr < 0x1000);
-    if (lowBank)
-        ensureCHRBankLoaded(state, true, addr);
-    else
-        ensureCHRBankLoaded(state, false, addr);
-
-    uint8_t* bank = lowBank ? state->ptr_CHR_bank_4K_low : state->ptr_CHR_bank_4K_high;
-    data = bank ? bank[addr & 0x0FFF] : 0;
-
-    // Auto-banking on $FD/$FE pattern
+static inline void mapper009_autoBank(Mapper009_state* state, bool lowBank, uint8_t data) {
     if (data == 0xFD || data == 0xFE) {
         if (lowBank) {
             if (data == 0xFD) {
@@ -267,7 +204,6 @@ bool mapper009_ppuRead(Mapper* mapper, uint16_t addr, uint8_t& data) {
                 state->latch0 = 0xFE;
                 state->ptr_CHR_bank_4K_low = getCHRBank(state, state->chr_bank0_fe);
             }
-            if (!state->ptr_CHR_bank_4K_low) state->ptr_CHR_bank_4K_low = state->dummy_chr;
             MAPPER_LOG("AUTO-BANK low: %s -> bank %d\n", data==0xFD?"FD":"FE",
                        data==0xFD? state->chr_bank0_fd : state->chr_bank0_fe);
         } else {
@@ -278,11 +214,25 @@ bool mapper009_ppuRead(Mapper* mapper, uint16_t addr, uint8_t& data) {
                 state->latch1 = 0xFE;
                 state->ptr_CHR_bank_4K_high = getCHRBank(state, state->chr_bank1_fe);
             }
-            if (!state->ptr_CHR_bank_4K_high) state->ptr_CHR_bank_4K_high = state->dummy_chr;
             MAPPER_LOG("AUTO-BANK high: %s -> bank %d\n", data==0xFD?"FD":"FE",
                        data==0xFD? state->chr_bank1_fd : state->chr_bank1_fe);
         }
     }
+}
+
+bool mapper009_ppuRead(Mapper* mapper, uint16_t addr, uint8_t& data) {
+    if (addr > 0x1FFF) return false;
+
+    Mapper009_state* state = (Mapper009_state*)mapper->state;
+    if (!state) { data = 0; return true; }
+
+    mapper009_updateLatch(state, addr);
+
+    bool lowBank = (addr < 0x1000);
+    uint8_t* bank = lowBank ? state->ptr_CHR_bank_4K_low : state->ptr_CHR_bank_4K_high;
+    data = bank[addr & 0x0FFF];
+
+    mapper009_autoBank(state, lowBank, data);
     return true;
 }
 
@@ -297,14 +247,15 @@ uint8_t* mapper009_ppuReadPtr(Mapper* mapper, uint16_t addr) {
     if (!state) return nullptr;
 
     mapper009_updateLatch(state, addr);
-    bool lowBank = (addr < 0x1000);
-    if (lowBank)
-        ensureCHRBankLoaded(state, true, addr);
-    else
-        ensureCHRBankLoaded(state, false, addr);
 
+    bool lowBank = (addr < 0x1000);
     uint8_t* bank = lowBank ? state->ptr_CHR_bank_4K_low : state->ptr_CHR_bank_4K_high;
     if (!bank) return nullptr;
+
+    // Read data for auto-banking (same as ppuRead)
+    uint8_t data = bank[addr & 0x0FFF];
+    mapper009_autoBank(state, lowBank, data);
+
     return &bank[addr & 0x0FFF];
 }
 
@@ -316,7 +267,6 @@ void mapper009_reset(Mapper* mapper) {
     Mapper009_state* state = (Mapper009_state*)mapper->state;
     if (!state) return;
 
-    // Power-on defaults
     state->latch0 = 0xFE;
     state->latch1 = 0xFE;
     state->chr_bank0_fd = 0;
@@ -325,14 +275,18 @@ void mapper009_reset(Mapper* mapper) {
     state->chr_bank1_fe = 3;
     state->prg_bank = 0;
 
-    // Reset all pointers to dummy (lazy reload)
-    for (int i = 0; i < 4; i++)
-        state->ptr_PRG_bank_8K[i] = state->dummy_chr;
-    state->ptr_CHR_bank_4K_low = state->dummy_chr;
-    state->ptr_CHR_bank_4K_high = state->dummy_chr;
+    // Eager load all banks
+    state->ptr_PRG_bank_8K[0] = getPRGBank(state, state->prg_bank);
+    state->ptr_PRG_bank_8K[1] = getPRGBank(state, state->number_PRG_banks - 3);
+    state->ptr_PRG_bank_8K[2] = getPRGBank(state, state->number_PRG_banks - 2);
+    state->ptr_PRG_bank_8K[3] = getPRGBank(state, state->number_PRG_banks - 1);
+
+    state->ptr_CHR_bank_4K_low = getCHRBank(state, state->chr_bank0_fe);
+    state->ptr_CHR_bank_4K_high = getCHRBank(state, state->chr_bank1_fe);
 
     state->cart->setMirrorMode(Cartridge::VERTICAL);
-    MAPPER_LOG("MMC2 RESET: lazy loading enabled\n");
+    MAPPER_LOG("MMC2 RESET: eager loading, prg_banks %d, chr_banks %d\n",
+               state->number_PRG_banks, state->number_CHR_banks);
 }
 
 void mapper009_dumpState(Mapper* mapper, File& stateFile) {
@@ -358,12 +312,25 @@ void mapper009_loadState(Mapper* mapper, File& stateFile) {
     stateFile.read((uint8_t*)&state->chr_bank1_fd, sizeof(state->chr_bank1_fd));
     stateFile.read((uint8_t*)&state->chr_bank1_fe, sizeof(state->chr_bank1_fe));
     stateFile.read((uint8_t*)&state->prg_bank, sizeof(state->prg_bank));
-    // Reset pointers to dummy (will be reloaded on next access)
-    for (int i = 0; i < 4; i++)
-        state->ptr_PRG_bank_8K[i] = state->dummy_chr;
-    state->ptr_CHR_bank_4K_low = state->dummy_chr;
-    state->ptr_CHR_bank_4K_high = state->dummy_chr;
-    MAPPER_LOG("State loaded (pointers invalidated)\n");
+
+    // Invalidate LRU cache and eager reload
+    if (state->backend == ROMBackend::LRU) {
+        invalidateCache(&state->PRG_cache_8K);
+        invalidateCache(&state->CHR_cache_4K);
+    }
+
+    // Eager load all banks from restored registers
+    state->ptr_PRG_bank_8K[0] = getPRGBank(state, state->prg_bank);
+    state->ptr_PRG_bank_8K[1] = getPRGBank(state, state->number_PRG_banks - 3);
+    state->ptr_PRG_bank_8K[2] = getPRGBank(state, state->number_PRG_banks - 2);
+    state->ptr_PRG_bank_8K[3] = getPRGBank(state, state->number_PRG_banks - 1);
+
+    state->ptr_CHR_bank_4K_low = getCHRBank(state,
+        (state->latch0 == 0xFD) ? state->chr_bank0_fd : state->chr_bank0_fe);
+    state->ptr_CHR_bank_4K_high = getCHRBank(state,
+        (state->latch1 == 0xFD) ? state->chr_bank1_fd : state->chr_bank1_fe);
+
+    MAPPER_LOG("State loaded (cache invalidated, eager reload)\n");
 }
 
 // -----------------------------------------------------------------------------
@@ -384,7 +351,6 @@ Mapper createMapper009(uint8_t PRG_banks, uint8_t CHR_banks, ROMBackend backend,
         state->mROM = &cart->mROM;
         MAPPER_LOG("MMC2: FLASH mode, PRG=%d, CHR=%d\n", state->number_PRG_banks, state->number_CHR_banks);
     } else {
-        // Initialise caches with increased size
         bankInit(&state->PRG_cache_8K, state->PRG_banks_8K, MAPPER009_MAX_CACHED_PRG_BANKS, 8192, cart);
         bankInit(&state->CHR_cache_4K, state->CHR_banks_4K, MAPPER009_MAX_CACHED_CHR_BANKS, 4096, cart);
         MAPPER_LOG("MMC2: LRU mode, PRG=%d, CHR=%d, cache PRG=%d, CHR=%d\n",
